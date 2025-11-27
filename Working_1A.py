@@ -6,11 +6,11 @@ import os
 
 # --- 1. SETUP PATHS ---
 # Your specific directory
-BASE_DIR = r'/Users/jimvanerp/Documents/Airline planning/AirlinePlanningOptimization'
+#BASE_DIR = r'/Users/jimvanerp/Documents/GitHub/AirlinePlanningOptimization'
 
 # Define full paths to your files
-demand_file = os.path.join(BASE_DIR, 'DemandGroup12.xlsx')
-pop_file = os.path.join(BASE_DIR, 'pop.xlsx')
+demand_file = 'DemandGroup12.xlsx'
+pop_file = 'pop.xlsx'
 
 # --- CONSTANTS ---
 R_E = 6371       # Radius of Earth (km)
