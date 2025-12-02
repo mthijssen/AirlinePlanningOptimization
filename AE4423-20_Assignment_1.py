@@ -14,7 +14,7 @@ airport_data = airport_data.head(6).T
 demand_data = pd.read_excel('DemandGroup12.xlsx', index_col=1, header=11)
 pop = pd.read_excel('pop.xlsx', header=2)
 
-""" Plan is nu om voor elke D_ij de pop data en gdp data aan de juiste i en j te koppelen
+"""Plan is nu om voor elke D_ij de pop data en gdp data aan de juiste i en j te koppelen
 en dan voor alle D_ij's de OLS toe te passen """
 
 """Eerste stap daar in is elke ICAO code matchen met alle city names, pop data, en gdp data. Dat gaan we hier onder doen"""
@@ -44,20 +44,11 @@ OD = demand_data #OD staat voor Origin en Destination
 OD_long = OD.stack().reset_index()
 OD_long.columns = ["Origin", "Destination", "Demand"]
 
-OD_long = OD_long.merge(
-    df.add_prefix("O_"),
-    left_on="Origin",
-    right_on="O_ICAO Code",
-    how="left"
-)
-
-OD_long = OD_long.merge(
-    df.add_prefix("D_"),
-    left_on="Destination",
-    right_on="D_ICAO Code",
-    how="left"
-)
-
+#Origin aangeven
+OD_long = OD_long.merge(df.add_prefix("O_"), left_on="Origin", right_on="O_ICAO Code", how="left")
+#Destination
+OD_long = OD_long.merge(df.add_prefix("D_"), left_on="Destination", right_on="D_ICAO Code", how="left")
+#London --> London enz. weghalen
 OD_long = OD_long[OD_long["Origin"] != OD_long["Destination"]]
 
 """Nu wordt de lengte tussen twee vliegvelden uitgerekend"""
@@ -105,7 +96,7 @@ print(f"b3 (Distance):       {b3}")
 print("="*40)
 print(model.summary())
 
-"""Plotten van de data"""
+"""Plotten van de data voor de 2021 est demand vs real demand"""
 
 OD_long['Est_Demand'] = k * (
     (OD_long['O_Population_2021']*OD_long['D_Population_2021'])**b1 * (OD_long['O_GDP_2021']*OD_long['D_GDP_2021'])**b2
@@ -117,6 +108,48 @@ plt.plot([0, OD_long['Demand'].max()], [0, OD_long['Demand'].max()], 'r--', labe
 plt.xlabel("Actual Demand (2021)")
 plt.ylabel("Estimated Demand (Model)")
 plt.title(f"Gravity Model Calibration\nR2: {model.rsquared:.3f}")
+plt.legend()
+plt.grid(True)
+plt.show()
+
+"""Now to forecast the population and GDP for 2026"""
+
+pop_growth = (df["Population_2024"] / df["Population_2021"]) ** (1/3)
+df["Population_2026"] = df["Population_2024"] * (pop_growth ** 2)
+
+gdp_growth = (df["GDP_2024"] / df["GDP_2021"]) ** (1/3)
+df["GDP_2026"] = df["GDP_2024"] * (gdp_growth ** 2)
+
+"""Add new data to df with origin and destination labels"""
+
+OD_long = OD_long.merge(
+    df.add_prefix("O_"),
+    left_on="Origin",
+    right_on="O_ICAO Code"
+)
+
+OD_long = OD_long.merge(
+    df.add_prefix("D_"),
+    left_on="Destination",
+    right_on="D_ICAO Code"
+)
+
+"""Calculate Estimates 2026 using b1, b2, b3, and k we already found"""
+
+OD_long['Est_Demand_2026'] = k * (
+    (OD_long['O_Population_2026'] * OD_long['D_Population_2026'])**b1 *
+    (OD_long['O_GDP_2026']         * OD_long['D_GDP_2026'])**b2
+) / ((f_cost * OD_long['Distance'])**b3)
+
+
+"""Plot 2026 figure"""
+
+plt.figure(figsize=(10,6))
+plt.scatter(OD_long['Demand'], OD_long['Est_Demand_2026'], alpha=0.6)
+plt.plot([0, OD_long['Demand'].max()], [0, OD_long['Demand'].max()], 'r--', label='Perfect Fit') # plots line through y=x to easily see how similar the values are
+plt.xlabel("Actual Demand (2021)")
+plt.ylabel("Estimated Demand (2026)")
+plt.title("Gravity Model Forecast for 2026")
 plt.legend()
 plt.grid(True)
 plt.show()
