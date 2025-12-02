@@ -29,4 +29,10 @@ def load_df():
         pd.to_numeric, errors="coerce"
     )
 
+    pop_growth = (df["Population_2024"] / df["Population_2021"]) ** (1/3)
+    df["Population_2026"] = df["Population_2024"] * (pop_growth ** 2)
+
+    gdp_growth = (df["GDP_2024"] / df["GDP_2021"]) ** (1/3)
+    df["GDP_2026"] = df["GDP_2024"] * (gdp_growth ** 2)
+
     return df, demand_data
