@@ -43,12 +43,12 @@ except Exception as e:
 # =============================================================================
 
 HUB = 'EDDF' 
-LF = 0.75    
-FUEL_PRICE = 1.42 
-WEEKS_PER_YEAR = 1 
-OPERATING_HOURS_PER_WEEK = 10 * 7 
-TAT_HUB_FACTOR = 1.5 
-COST_HUB_DISCOUNT = 0.70 
+LF = 0.75                           #Average load factor 75% 
+FUEL_PRICE = 1.42                   #Fixed fuel price per EUR/gallon
+WEEKS_PER_YEAR = 1                  #Flight schedule for 1 week
+OPERATING_HOURS_PER_WEEK = 10 * 7   #10 operating hours per week
+TAT_HUB_FACTOR = 1.5                #50% extra turn around time at the hub
+COST_HUB_DISCOUNT = 0.70            #All operating costs 30% lower at the hub
 
 # Placeholder Network Data (Replace with your Question 1A loading logic)
 airports = df['ICAO Code']
@@ -65,32 +65,32 @@ demand_matrix = pd.DataFrame([
 ], index=airports, columns=airports)
 
 # =============================================================================
-# 3. HELPER FUNCTIONS
+# 3. Yield & Costs calculations
 # =============================================================================
 
-def calculate_yield(distance):
-    if distance == 0: return 0
+def calculate_yield(distance):      #Yield per fligtht per distance in EURO        
+    if distance == 0: return 0      #Prevent Yield from flying to own airport
     return 5.9 * (distance ** -0.76) + 0.043
 
-def calculate_operating_cost(ac_type, origin, dest, dist):
-    if dist == 0: return 0
+def calculate_operating_cost(ac_type, origin, dest, dist): #Operating costs, bases on Fixed, Time-based and Fuel costs
+    if dist == 0: return 0          
     
     ac = df_aircraft.loc[ac_type]
     
-    # Excel Headers
-    c_fixed = ac['Fixed operating cost C_X [€]']
+    # Excel Headers from Excel
+    c_fixed = ac['Fixed operating cost C_X [€]']        #Fixed costs
     speed   = ac['Speed [km/h]']
     c_time_param = ac['Time cost parameter C_T [€/hr]']
     c_fuel_param = ac['Fuel cost parameter C_F']
     
-    # Logic
+    # Calculations
     flight_time = dist / speed
-    c_time = c_time_param * flight_time
-    c_fuel = (c_fuel_param * FUEL_PRICE / 1.5) * dist
+    c_time = c_time_param * flight_time                 #Time-Based costs
+    c_fuel = (c_fuel_param * FUEL_PRICE / 1.5) * dist   #Fuel Costs
     
-    total_cost = c_fixed + c_time + c_fuel
+    total_cost = c_fixed + c_time + c_fuel              #Total costs
     
-    if origin == HUB or dest == HUB:
+    if origin == HUB or dest == HUB:                    #Implement HUB discount
         total_cost *= COST_HUB_DISCOUNT
         
     return total_cost
@@ -101,24 +101,24 @@ def calculate_operating_cost(ac_type, origin, dest, dist):
 
 m = Model('Airline_Network_1B')
 
-A = airports
-K = df_aircraft.index.tolist()
+N = airports                    #AANPASSEN AAN DATA  #Set of airports N 
+K = df_aircraft.index.tolist()  #AANPASSSEN AAN DATA #Set of aircrafts type K
 
 # Decision Variables
-f = {} # Frequency
-x = {} # Passengers
-ac_count = {} # Fleet Size
+f = {}          # Frequency 
+x = {}          # Passengers
+ac_count = {}   # Fleet Size
 
 print("\nInitializing Variables...")
 for k in K:
     ac_count[k] = m.addVar(vtype=GRB.INTEGER, lb=0, name=f"Fleet_{k}")
-    for i in A:
-        for j in A:
+    for i in N:
+        for j in N:
             if i != j:
                 f[k,i,j] = m.addVar(vtype=GRB.INTEGER, lb=0, name=f"Freq_{k}_{i}_{j}")
 
-for i in A:
-    for j in A:
+for i in N:
+    for j in N:
         if i != j:
             x[i,j] = m.addVar(vtype=GRB.CONTINUOUS, lb=0, name=f"Pax_{i}_{j}")
 
@@ -130,8 +130,8 @@ total_op_cost = 0
 total_lease_cost = 0
 
 # Revenue
-for i in A:
-    for j in A:
+for i in N:
+    for j in N:
         if i == j: continue
         dist = dist_matrix.loc[i,j]
         yld = calculate_yield(dist)
@@ -139,8 +139,8 @@ for i in A:
 
 # Operating Costs
 for k in K:
-    for i in A:
-        for j in A:
+    for i in N:
+        for j in N:
             if i == j: continue
             dist = dist_matrix.loc[i,j]
             cost_per_flight = calculate_operating_cost(k, i, j, dist)
@@ -150,14 +150,15 @@ for k in K:
 for k in K:
     total_lease_cost += ac_count[k] * df_aircraft.loc[k, 'Weekly lease cost [€]']
 
+#Objective function
 m.setObjective(total_revenue - total_op_cost - total_lease_cost, GRB.MAXIMIZE)
 
 # --- Constraints ---
 print("Adding Constraints...")
 
 # C1 & C2: Demand and Capacity
-for i in A:
-    for j in A:
+for i in N:
+    for j in N:
         if i == j: continue
         m.addConstr(x[i,j] <= demand_matrix.loc[i,j], name=f"Demand_{i}_{j}")
         
@@ -166,16 +167,16 @@ for i in A:
 
 # C3: Flow Balance
 for k in K:
-    for i in A:
-        arriving = quicksum(f[k,j,i] for j in A if j != i)
-        departing = quicksum(f[k,i,j] for j in A if j != i)
+    for i in N:
+        arriving = quicksum(f[k,j,i] for j in N if j != i)
+        departing = quicksum(f[k,i,j] for j in N if j != i)
         m.addConstr(arriving == departing, name=f"Balance_{k}_{i}")
 
 # C4: Fleet Utilization
 for k in K:
     total_time_needed = 0
-    for i in A:
-        for j in A:
+    for i in N:
+        for j in N:
             if i == j: continue
             dist = dist_matrix.loc[i,j]
             
@@ -195,8 +196,8 @@ for k in K:
     ac_range = df_aircraft.loc[k, 'Maximum range [km]']
     ac_runway = df_aircraft.loc[k, 'Runway required [m]']
     
-    for i in A:
-        for j in A:
+    for i in N:
+        for j in N:
             if i == j: continue
             dist = dist_matrix.loc[i,j]
             r_origin = runway_lengths[i]
@@ -207,16 +208,16 @@ for k in K:
 
 # --- NEWLY ADDED: C6 Hub-and-Spoke Topology ---
 for k in K:
-    for i in A:
-        for j in A:
+    for i in N:
+        for j in N:
             if i != j:
                 # If NEITHER Origin NOR Dest is the Hub, force frequency to 0
                 if i != HUB and j != HUB:
                     m.addConstr(f[k,i,j] == 0, name=f"HubSpoke_{k}_{i}_{j}")
 
 # C7: Slots
-for i in A:
-    total_movements = quicksum((f[k,i,j] + f[k,j,i]) for k in K for j in A if j != i)
+for i in N:
+    total_movements = quicksum((f[k,i,j] + f[k,j,i]) for k in K for j in N if j != i)
     m.addConstr(total_movements <= slots_limit[i], name=f"Slots_{i}")
 
 # =============================================================================
@@ -242,8 +243,8 @@ if m.status == GRB.OPTIMAL:
     print("-" * 55)
     
     for k in K:
-        for i in A:
-            for j in A:
+        for i in N:
+            for j in N:
                 if i != j:
                     freq = f[k,i,j].X
                     if freq > 0.5:
