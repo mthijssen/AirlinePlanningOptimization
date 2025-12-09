@@ -60,6 +60,8 @@ df_pop['GDP_2021'] = pd.to_numeric(df_pop['GDP_2021'])
 df_master = pd.merge(df_airports, df_pop, on='City', how='inner')
 print(f"Successfully matched {len(df_master)} airports with population data.")
 
+# print(df_master)
+
 # --- 6. EXTRACT DEMAND MATRIX ---
 # Matrix Headers (Destinations) are at Row 12 (Index 11)
 # Data starts at Row 13 (Index 12)
@@ -93,6 +95,8 @@ for i in range(len(df_master)):
 
 df_demand = pd.DataFrame(demand_list)
 
+# print(df_demand)
+
 # --- 7. PREPARE REGRESSION MODEL ---
 # Merge Origin Info
 df_model = pd.merge(df_demand, df_master, left_on='Origin', right_on='ICAO')
@@ -102,7 +106,8 @@ df_model = df_model.rename(columns={'Pop_2021': 'Pop_O', 'GDP_2021': 'GDP_O', 'L
 df_model = pd.merge(df_model, df_master, left_on='Destination', right_on='ICAO', suffixes=('_O', '_D'))
 df_model = df_model.rename(columns={'Pop_2021': 'Pop_D', 'GDP_2021': 'GDP_D', 'Lat': 'Lat_D', 'Lon': 'Lon_D'})
 
-# Calculate Distance
+
+# # Calculate Distance
 def calc_dist(row):
     lat1, lon1 = np.radians(row['Lat_O']), np.radians(row['Lon_O'])
     lat2, lon2 = np.radians(row['Lat_D']), np.radians(row['Lon_D'])
@@ -112,6 +117,8 @@ def calc_dist(row):
     return 2 * R_E * np.arcsin(np.sqrt(a))
 
 df_model['Distance'] = df_model.apply(calc_dist, axis=1)
+
+print(df_model)
 
 # Linearization (Log transformation)
 df_model['ln_D'] = np.log(df_model['Demand'])

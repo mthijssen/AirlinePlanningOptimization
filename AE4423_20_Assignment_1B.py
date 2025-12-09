@@ -15,4 +15,5 @@ OD_long, model, k, b1, b2, b3 = build_OD_long()
 
 # print(aircraft_data.head())
 
-print(OD_long)
+
+print(df['ICAO Code'])

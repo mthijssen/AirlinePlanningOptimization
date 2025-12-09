@@ -9,6 +9,11 @@ import pandas as pd
 import numpy as np
 from gurobipy import Model, GRB, quicksum
 
+from AE4423_20_Assignment_1A import build_df, build_OD_long
+
+df, demand_data = build_df()
+OD_long, model, k, b1, b2, b3 = build_OD_long()
+
 # =============================================================================
 # 1. LOAD AIRCRAFT DATA (Directly using Excel Headers)
 # =============================================================================
@@ -46,7 +51,7 @@ TAT_HUB_FACTOR = 1.5
 COST_HUB_DISCOUNT = 0.70 
 
 # Placeholder Network Data (Replace with your Question 1A loading logic)
-airports = ['EDDF', 'EGLL', 'LFPG', 'EHAM'] 
+airports = df['ICAO Code']
 runway_lengths = {'EDDF': 4000, 'EGLL': 3900, 'LFPG': 4200, 'EHAM': 3800}
 slots_limit = {'EDDF': 10000, 'EGLL': 9000, 'LFPG': 9500, 'EHAM': 8000}
 

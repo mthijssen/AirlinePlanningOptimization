@@ -35,4 +35,6 @@ def load_df():
     gdp_growth = (df["GDP_2024"] / df["GDP_2021"]) ** (1/3)
     df["GDP_2026"] = df["GDP_2024"] * (gdp_growth ** 2)
 
+    demand_data = demand_data.drop(columns=["Demand per week"])
+
     return df, demand_data
