@@ -32,7 +32,7 @@ try:
         df_aircraft[col] = pd.to_numeric(df_aircraft[col], errors='ignore')
 
     print("Aircraft Data Loaded Successfully:")
-    print(df_aircraft.head())
+    # print(df_aircraft.head())
 
 except Exception as e:
     print(f"\nCRITICAL ERROR LOADING EXCEL FILE: {e}")
@@ -50,8 +50,30 @@ OPERATING_HOURS_PER_WEEK = 10 * 7
 TAT_HUB_FACTOR = 1.5 
 COST_HUB_DISCOUNT = 0.70 
 
-# Placeholder Network Data (Replace with your Question 1A loading logic)
-airports = df['ICAO Code']
+df['Available slots'] = df['Available slots'].fillna(0).astype(int)
+
+# print(df.head())
+airports = df['ICAO Code'].tolist()
+runway_lengths = df.set_index('ICAO Code')['Runway (m)'].to_dict()
+slots_limit = df.set_index('ICAO Code')['Available slots'].to_dict()
+
+OD_dist = OD_long[['Origin', 'Destination', 'Distance']]
+
+dist_matrix = OD_dist.pivot(
+    index="Origin",
+    columns="Destination",
+    values="Distance"
+)
+
+dist_matrix = dist_matrix.fillna(0)
+dist_matrix = dist_matrix.reindex(index=airports, columns=airports)
+demand_matrix = demand_data
+
+# print(dist_matrix)
+# print(demand_matrix)
+
+"""
+airports = ['EDDF', 'EGLL', 'LFPG', 'EHAM'] 
 runway_lengths = {'EDDF': 4000, 'EGLL': 3900, 'LFPG': 4200, 'EHAM': 3800}
 slots_limit = {'EDDF': 10000, 'EGLL': 9000, 'LFPG': 9500, 'EHAM': 8000}
 
@@ -63,6 +85,10 @@ dist_matrix = pd.DataFrame([
 demand_matrix = pd.DataFrame([
     [0, 2000, 1500, 1200], [2000, 0, 500, 400], [1500, 500, 0, 300], [1200, 400, 300, 0]
 ], index=airports, columns=airports)
+
+print(dist_matrix)
+print(demand_matrix)
+"""
 
 # =============================================================================
 # 3. HELPER FUNCTIONS
