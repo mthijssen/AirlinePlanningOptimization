@@ -63,6 +63,16 @@ def build_OD_long():
     OD_long = OD.stack().reset_index()
     OD_long.columns = ["Origin", "Destination", "Demand"]
 
+    """First forecast the population and GDP for 2026"""
+
+    pop_growth = (df["Population_2024"] / df["Population_2021"]) ** (1/3)
+    df["Population_2026"] = df["Population_2024"] * (pop_growth ** 2)
+
+    gdp_growth = (df["GDP_2024"] / df["GDP_2021"]) ** (1/3)
+    df["GDP_2026"] = df["GDP_2024"] * (gdp_growth ** 2)
+
+    print(OD_long["Origin"])
+
     #Origin aangeven
     OD_long = OD_long.merge(df.add_prefix("O_"), left_on="Origin", right_on="O_ICAO Code", how="left")
     #Destination
@@ -98,27 +108,21 @@ def build_OD_long():
     (OD_long['O_Population_2021']*OD_long['D_Population_2021'])**b1 * (OD_long['O_GDP_2021']*OD_long['D_GDP_2021'])**b2
     ) / ((f_cost*OD_long['Distance'])**b3)
 
-    """Now to forecast the population and GDP for 2026"""
 
-    pop_growth = (df["Population_2024"] / df["Population_2021"]) ** (1/3)
-    df["Population_2026"] = df["Population_2024"] * (pop_growth ** 2)
-
-    gdp_growth = (df["GDP_2024"] / df["GDP_2021"]) ** (1/3)
-    df["GDP_2026"] = df["GDP_2024"] * (gdp_growth ** 2)
 
     """Add new data to df with origin and destination labels"""
 
-    OD_long = OD_long.merge(
-        df.add_prefix("O_"),
-        left_on="Origin",
-        right_on="O_ICAO Code"
-    )
+    # OD_long = OD_long.merge(
+    #     df.add_prefix("O_"),
+    #     left_on="Origin",
+    #     right_on="O_ICAO Code"
+    # )
 
-    OD_long = OD_long.merge(
-        df.add_prefix("D_"),
-        left_on="Destination",
-        right_on="D_ICAO Code"
-    )
+    # OD_long = OD_long.merge(
+    #     df.add_prefix("D_"),
+    #     left_on="Destination",
+    #     right_on="D_ICAO Code"
+    # )
 
     """Calculate Estimates 2026 using b1, b2, b3, and k we already found"""
 
@@ -126,6 +130,8 @@ def build_OD_long():
         (OD_long['O_Population_2026'] * OD_long['D_Population_2026'])**b1 *
         (OD_long['O_GDP_2026'] * OD_long['D_GDP_2026'])**b2
     ) / ((f_cost * OD_long['Distance'])**b3)
+
+    # print(OD_long.columns)
 
     return OD_long, model, k, b1, b2, b3
 
