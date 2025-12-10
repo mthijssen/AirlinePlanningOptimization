@@ -14,6 +14,7 @@ from AE4423_20_Assignment_1A import build_df, build_OD_long
 df, demand_data = build_df()
 OD_long, model, k, b1, b2, b3 = build_OD_long()
 
+
 # =============================================================================
 # 1. LOAD AIRCRAFT DATA (Directly using Excel Headers)
 # =============================================================================
@@ -51,6 +52,28 @@ TAT_HUB_FACTOR = 1.5                #50% extra turn around time at the hub
 COST_HUB_DISCOUNT = 0.70            #All operating costs 30% lower at the hub
 
 df['Available slots'] = df['Available slots'].fillna(0).astype(int)
+
+# =============================================================================
+
+print("--- APPLYING SLOT FIXES ---")
+
+# 1. Fix Hub Slots (Convert 0 to 99999)
+# specifically for the row where ICAO Code is the HUB
+df.loc[df['ICAO Code'] == HUB, 'Available slots'] = 99999
+print(f" > Updated Hub ({HUB}) slots to 99999 (Infinite)")
+
+# 2. Fix Daily vs Weekly (Scale small values)
+# If a slot limit is small (e.g. 3), it means 3 per day, so we multiply by 7.
+def scale_daily_slots(val):
+    if 0 < val < 50: # Threshold: anything less than 50 is likely "Daily"
+        return val * 7
+    return val
+
+# Apply the scaling function to the column
+df['Available slots'] = df['Available slots'].apply(scale_daily_slots)
+print(f" > Scaled small slot values (x7) for weekly operations")
+
+# =============================================================================
 
 # print(df.head())
 airports = df['ICAO Code'].tolist()
@@ -124,6 +147,9 @@ def calculate_operating_cost(ac_type, origin, dest, dist): #Operating costs, bas
 # =============================================================================
 # 4. GUROBI MODEL
 # =============================================================================
+#Define the Hub Parameter 'g'
+# g[i] = 0 if i is the HUB, 1 otherwise
+g = {node: 0 if node == HUB else 1 for node in airports}
 
 m = Model('Airline_Network_1B')
 
@@ -134,6 +160,8 @@ K = df_aircraft.index.tolist()  #AANPASSSEN AAN DATA #Set of aircrafts type K
 f = {}          # Frequency 
 x = {}          # Passengers
 ac_count = {}   # Fleet Size
+w = {}          # flow from airport i to airport j that transfers at hub 
+
 
 print("\nInitializing Variables...")
 for k in K:
@@ -147,6 +175,11 @@ for i in N:
     for j in N:
         if i != j:
             x[i,j] = m.addVar(vtype=GRB.CONTINUOUS, lb=0, name=f"Pax_{i}_{j}")
+            
+for i in N:
+    for j in N:
+        if i != j:
+            w[i,j] = m.addVar(vtype=GRB.CONTINUOUS, lb=0, name=f"PaxHub_{i}_{j}")
 
 m.update()
 
@@ -161,7 +194,8 @@ for i in N:
         if i == j: continue
         dist = dist_matrix.loc[i,j]
         yld = calculate_yield(dist)
-        total_revenue += x[i,j] * yld * dist
+        
+        total_revenue += (x[i,j] + w[i,j]) * yld * dist
 
 # Operating Costs
 for k in K:
@@ -182,14 +216,30 @@ m.setObjective(total_revenue - total_op_cost - total_lease_cost, GRB.MAXIMIZE)
 # --- Constraints ---
 print("Adding Constraints...")
 
+for i in N:
+    for j in N:
+        if i == j: continue
+
+        # --- 1. Volume Constraint (Demand) ---
+        # Total passengers (Direct + Transfer) <= Demand
+        m.addConstr(x[i,j] + w[i,j] <= demand_matrix.loc[i,j], name=f"Demand_{i}_{j}") # Total flow (passenger flow + hub flow) smaller than demand
+
+        # --- 2. Transfer Feasibility (Hub Logic) ---
+        # If i is Hub OR j is Hub, w[i,j] becomes 0.
+        # This forces transfers to only exist for Spoke-to-Spoke pairs.
+        m.addConstr(w[i,j] <= demand_matrix.loc[i,j] * g[i] * g[j], name=f"TransferLogic_{i}_{j}")
+
 # C1 & C2: Demand and Capacity
 for i in N:
     for j in N:
         if i == j: continue
-        m.addConstr(x[i,j] <= demand_matrix.loc[i,j], name=f"Demand_{i}_{j}")
         
-        total_capacity = quicksum(f[k,i,j] * df_aircraft.loc[k, 'Seats'] for k in K)
-        m.addConstr(x[i,j] <= total_capacity * LF, name=f"Cap_{i}_{j}")
+        total_capacity = quicksum(f[k,i,j] * df_aircraft.loc[k, 'Seats'] for k in K)   #
+        m.addConstr(
+            x[i,j] +                                            #load local Pax (origen to hub)
+            quicksum(w[i,m] * (1 - g[j]) for m in N if m != i) +   #load inbound Pax (origen to hub as transfer) m!= i TOEVOEGEN AAN CONSTRAINS
+            quicksum(w[m,j] * (1 - g[i]) for m in N if m != j)     #load outbound Pax (hub to destination as tranfer)
+            <= total_capacity * LF, name=f"Cap_{i}_{j}")
 
 # C3: Flow Balance
 for k in K:
