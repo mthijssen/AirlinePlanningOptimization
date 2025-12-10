@@ -54,24 +54,19 @@ COST_HUB_DISCOUNT = 0.70            #All operating costs 30% lower at the hub
 df['Available slots'] = df['Available slots'].fillna(0).astype(int)
 
 # =============================================================================
+# 1. Fix Hub Slots (Convert hub slots 0 to 99999)
 
-print("--- APPLYING SLOT FIXES ---")
-
-# 1. Fix Hub Slots (Convert 0 to 99999)
-# specifically for the row where ICAO Code is the HUB
 df.loc[df['ICAO Code'] == HUB, 'Available slots'] = 99999
-print(f" > Updated Hub ({HUB}) slots to 99999 (Infinite)")
 
 # 2. Fix Daily vs Weekly (Scale small values)
-# If a slot limit is small (e.g. 3), it means 3 per day, so we multiply by 7.
+# If a slot limit is small, <50, it means slots per day, so we multiply by 7 to get weekly
 def scale_daily_slots(val):
-    if 0 < val < 50: # Threshold: anything less than 50 is likely "Daily"
+    if 0 < val < 50: # Threshold: anything less than 50 is likely daily
         return val * 7
     return val
 
 # Apply the scaling function to the column
 df['Available slots'] = df['Available slots'].apply(scale_daily_slots)
-print(f" > Scaled small slot values (x7) for weekly operations")
 
 # =============================================================================
 
@@ -92,7 +87,7 @@ dist_matrix = dist_matrix.fillna(0)
 dist_matrix = dist_matrix.reindex(index=airports, columns=airports)
 demand_matrix = demand_data
 
-# print(dist_matrix)
+#print(dist_matrix)
 # print(demand_matrix)
 
 """
@@ -195,7 +190,7 @@ for i in N:
         dist = dist_matrix.loc[i,j]
         yld = calculate_yield(dist)
         
-        total_revenue += (x[i,j] + w[i,j]) * yld * dist
+        total_revenue += (x[i,j] + w[i,j]) * yld * dist #added flow to revenue
 
 # Operating Costs
 for k in K:
@@ -236,7 +231,7 @@ for i in N:
         
         total_capacity = quicksum(f[k,i,j] * df_aircraft.loc[k, 'Seats'] for k in K)   #
         m.addConstr(
-            x[i,j] +                                            #load local Pax (origen to hub)
+            x[i,j] +                                               #load local Pax (origen to hub)
             quicksum(w[i,m] * (1 - g[j]) for m in N if m != i) +   #load inbound Pax (origen to hub as transfer) m!= i TOEVOEGEN AAN CONSTRAINS
             quicksum(w[m,j] * (1 - g[i]) for m in N if m != j)     #load outbound Pax (hub to destination as tranfer)
             <= total_capacity * LF, name=f"Cap_{i}_{j}")
