@@ -58,16 +58,6 @@ df['Available slots'] = df['Available slots'].fillna(0).astype(int)
 
 df.loc[df['ICAO Code'] == HUB, 'Available slots'] = 99999
 
-# 2. Fix Daily vs Weekly (Scale small values)
-# If a slot limit is small, <50, it means slots per day, so we multiply by 7 to get weekly
-def scale_daily_slots(val):
-    if 0 < val < 50: # Threshold: anything less than 50 is likely daily
-        return val * 7
-    return val
-
-# Apply the scaling function to the column
-df['Available slots'] = df['Available slots'].apply(scale_daily_slots)
-
 # =============================================================================
 
 # print(df.head())
@@ -87,26 +77,6 @@ dist_matrix = dist_matrix.fillna(0)
 dist_matrix = dist_matrix.reindex(index=airports, columns=airports)
 demand_matrix = demand_data
 
-#print(dist_matrix)
-# print(demand_matrix)
-
-"""
-airports = ['EDDF', 'EGLL', 'LFPG', 'EHAM'] 
-runway_lengths = {'EDDF': 4000, 'EGLL': 3900, 'LFPG': 4200, 'EHAM': 3800}
-slots_limit = {'EDDF': 10000, 'EGLL': 9000, 'LFPG': 9500, 'EHAM': 8000}
-
-# Placeholder Matrices (Replace with Q1A data)
-dist_matrix = pd.DataFrame([
-    [0, 650, 450, 360], [650, 0, 340, 370], [450, 340, 0, 400], [360, 370, 400, 0]
-], index=airports, columns=airports)
-
-demand_matrix = pd.DataFrame([
-    [0, 2000, 1500, 1200], [2000, 0, 500, 400], [1500, 500, 0, 300], [1200, 400, 300, 0]
-], index=airports, columns=airports)
-
-print(dist_matrix)
-print(demand_matrix)
-"""
 
 # =============================================================================
 # 3. Yield & Costs calculations
