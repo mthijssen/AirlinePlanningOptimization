@@ -143,21 +143,11 @@ for l in L:
     )
     
     m.addConstr(direct_pax + recaptured_pax <= capacity[l], name=f"Cap_{l}")
-
-# 3. Recapture Rate Limit Constraints (Slide 13 doesn't explicitly show this but it's physically required)
-# t_p^r <= b_p^r * s_p  (OR simply handled by demand balance? 
-# Slide 13 implies demand balance handles flow. 
-# However, standard practice: You can't recapture more than spill.
-# But in this specific Slide 13 formulation, spill s_p and recapture t_pr are separate branches of demand.
-# D_p = t_p + s_p + sum(t_pr). 
-# There is NO constraint t_pr <= b * s_p in the slide image you showed.
-# The slide relies on the objective function to discourage recapture if it's not profitable.
-# The "rate" b_p^r is used in the objective function cost term.
-# I will COMMENT OUT this constraint to strictly follow Slide 13, 
-# unless you confirm the professor said "you can only recapture a fraction of the spill".
-# Usually, b is a 'recapture rate' parameter acting as a probability or fraction of demand.
-# If b is used as a cost multiplier (Fare_p - b * Fare_r), then it acts as a "value adjustment".
-# I will adhere to the Demand Balance equation which ensures flow conservation.
+    
+for (p, r), rate in recapture_rates.items():
+    if (p, r) in recap:
+        # Constraint: Recaptured pax <= Recapture Rate * Spilled Pax
+        m.addConstr(recap[p, r] <= rate * s[p], name=f"RateLimit_{p}_{r}")
 
 # 3. Non-negativity is handled by lb=0 in variable creation.
 
