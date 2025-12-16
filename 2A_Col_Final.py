@@ -17,9 +17,14 @@ import time
 # =============================================================================
 
 # Define filenames
-df_flights = pd.read_excel('Group_12.xlsx', sheet_name=0)
-df_itineraries = pd.read_excel('Group_12.xlsx', sheet_name=1)
-df_recapture = pd.read_excel('Group_12.xlsx', sheet_name=2)
+# Assuming files are local as per user context
+try:
+    df_flights = pd.read_excel('Group_12.xlsx', sheet_name=0)
+    df_itineraries = pd.read_excel('Group_12.xlsx', sheet_name=1)
+    df_recapture = pd.read_excel('Group_12.xlsx', sheet_name=2)
+except FileNotFoundError:
+    print("Error: Excel file not found.")
+    sys.exit()
 
 # --- Data Structures ---
 L = df_flights['Flight No.'].tolist()
@@ -48,8 +53,6 @@ for idx, row in df_itineraries.iterrows():
         if f2 in Q_l: Q_l[f2] += d
         
     itin_legs[p] = legs
-
-print(f"Calculated Q_l parameters. Max Leg Demand: {max(Q_l.values())}")
 
 # Recapture options
 recapture_options = []
@@ -143,8 +146,8 @@ while True:
     # Sigma (Demand)
     sigma = {p: con_demand[p].Pi for p in demand_data}
     
-    # Mu (Capacity Qi)
-    mu = {l: con_capacity_qi[l].Pi for l in L}
+    # Pi (Capacity Qi) - Renamed from 'mu' to 'pi' 
+    pi = {l: con_capacity_qi[l].Pi for l in L}
     
     cols_added_this_iter = 0
     
@@ -162,26 +165,20 @@ while True:
         # --- Reduced Cost Calculation ---
         # Variable: t_pr (Recaptured Pax)
         # Objective Coeff: Cost_pr = Fare_orig - rate * Fare_recap (Spill Cost Minimization)
-        
         cost_coeff = fare_data[orig] - (rate * fare_data.get(recap, 0))
-        
-        # Dual terms sum
         dual_sum = sigma[orig]
         
         # Add capacity duals (Qi Formulation Logic)
         # Recaptured pax means:
         # 1. They leave ORIG legs (so they count as "Recap OUT"). Coeff +1 in capacity constraint.
         # 2. They enter RECAP legs (so they count as "Recap IN"). Coeff -1 in capacity constraint.
-        
-        # +1 * Mu_l for l in ORIG path
         for l in itin_legs.get(orig, []):
-            if l in mu:
-                dual_sum += 1.0 * mu[l]
+            if l in pi:
+                dual_sum += 1.0 * pi[l]
                 
-        # -1 * Mu_l for l in RECAP path
         for l in itin_legs.get(recap, []):
-            if l in mu:
-                dual_sum += -1.0 * mu[l]
+            if l in pi:
+                dual_sum += -1.0 * pi[l]
         
         reduced_cost = cost_coeff - dual_sum
         
@@ -254,16 +251,27 @@ if mp.status == GRB.OPTIMAL:
         if not found_recap:
             print("  -> No Recapture")
 
-    # 5. Optimal Dual Variables (First 5 Flights)
-    print("\n--- Dual Variables (First 5 Flights) ---")
+    # 5. Optimal Dual Variables (Pi and Sigma)
+    print("\n--- Dual Variables: Capacity Constraints (Pi) for First 5 Flights ---")
+    print(f"{'Flight':<10} | {'Capacity':<10} | {'Shadow Price (Pi)':<20}")
+    print("-" * 50)
+    
     count = 0
     for l in L:
         if count >= 5: break
         constr = mp.getConstrByName(f"CapQi_{l}")
         if constr:
-            # Dual variable for capacity constraint
-            print(f"Flight {l} | Capacity: {capacity[l]} | Shadow Price (Mu): {constr.Pi:.2f}")
+            print(f"{l:<10} | {capacity[l]:<10} | {constr.Pi:.2f}")
             count += 1
+
+    print("\n--- Dual Variables: Demand Constraints (Sigma) for First 5 Itineraries ---")
+    print(f"{'Itinerary':<10} | {'Demand':<10} | {'Shadow Price (Sigma)':<20}")
+    print("-" * 50)
+    
+    for i, p in enumerate(list(demand_data.keys())[:5]):
+        constr = mp.getConstrByName(f"Dem_{p}")
+        if constr:
+            print(f"{p:<10} | {demand_data[p]:<10} | {constr.Pi:.2f}")
             
 else:
     print(f"Model Failed. Status: {mp.status}")
