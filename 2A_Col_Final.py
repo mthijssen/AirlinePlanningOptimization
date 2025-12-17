@@ -16,15 +16,11 @@ import time
 # 1. DATA LOADING
 # =============================================================================
 
-# Define filenames
-# Assuming files are local as per user context
-try:
-    df_flights = pd.read_excel('Group_12.xlsx', sheet_name=0)
-    df_itineraries = pd.read_excel('Group_12.xlsx', sheet_name=1)
-    df_recapture = pd.read_excel('Group_12.xlsx', sheet_name=2)
-except FileNotFoundError:
-    print("Error: Excel file not found.")
-    sys.exit()
+# --- Loading Data ---
+df_flights = pd.read_excel('Group_12.xlsx', sheet_name=0)
+df_itineraries = pd.read_excel('Group_12.xlsx', sheet_name=1)
+df_recapture = pd.read_excel('Group_12.xlsx', sheet_name=2)
+
 
 # --- Data Structures ---
 L = df_flights['Flight No.'].tolist()
@@ -34,7 +30,8 @@ fare_data = df_itineraries.set_index('Itinerary')['Price [EUR]'].to_dict()
 
 # Map Itinerary -> Legs
 itin_legs = {}
-# Also calculate Q_l (Unconstrained Demand per Leg)
+
+#Calculate Q_l (Unconstrained Demand per Leg)
 Q_l = {l: 0 for l in L}
 
 for idx, row in df_itineraries.iterrows():
@@ -67,7 +64,7 @@ for idx, row in df_recapture.iterrows():
 # 2. MASTER PROBLEM (RMP) SETUP
 # =============================================================================
 
-mp = Model("RMP_Qi_ColGen_Relaxed")
+mp = Model("RMP_Keypath_model")
 mp.setParam('OutputFlag', 0)
 
 # -- Constraints --
@@ -78,12 +75,11 @@ con_demand = {}
 for p in demand_data:
     con_demand[p] = mp.addConstr(LinExpr() == demand_data[p], name=f"Dem_{p}")
 
-# 2. Capacity Constraints (Qi Formulation)
+# 2. Capacity Constraints 
 # Sum(Spill_p on l) + Sum(Recap_OUT_p on l) - Sum(Recap_IN_p on l) >= Q_l - Cap_l
 con_capacity_qi = {}
 for l in L:
     rhs = Q_l[l] - capacity[l]
-    # We create constraint: LHS >= RHS
     con_capacity_qi[l] = mp.addConstr(LinExpr() >= rhs, name=f"CapQi_{l}")
 
 # -- Initialize Variables --
@@ -91,14 +87,11 @@ variables = {}
 recap_vars = {} # Store recapture vars separately for easy access
 
 # A. Spill Variables (s_p)
-# Objective: Fare_p
-# Demand Constraint: +1
-# Capacity (Qi) Constraint: +1 for every leg l used by p (Spill contributes to "Sum Spill")
 for p in demand_data:
     col = Column()
     col.addTerms(1.0, con_demand[p])
     
-    # Add to Capacity Constraints (Qi form: Spill counts as +1)
+    # Add to Capacity Constraints
     for l in itin_legs.get(p, []):
         if l in con_capacity_qi:
             col.addTerms(1.0, con_capacity_qi[l])
@@ -107,12 +100,6 @@ for p in demand_data:
     variables[f"spill_{p}"] = var
 
 # B. Original Transport Variables (t_p)
-# Objective: 0
-# Demand Constraint: +1
-# Capacity (Qi) Constraint: 0 contribution?
-# Logic: t_p = D_p - s_p - t_pr.
-# The Qi constraint is derived by substituting t_p out. 
-# So t_p does NOT appear in the Qi constraint.
 for p in demand_data:
     col = Column()
     col.addTerms(1.0, con_demand[p])
@@ -130,7 +117,7 @@ print(f"RMP Initialized with {initial_cols} columns.")
 # 3. COLUMN GENERATION LOOP
 # =============================================================================
 
-start_time = time.time()
+#start_time = time.time()
 iteration = 0
 cols_added_total = 0
 
@@ -146,7 +133,7 @@ while True:
     # Sigma (Demand)
     sigma = {p: con_demand[p].Pi for p in demand_data}
     
-    # Pi (Capacity Qi) - Renamed from 'mu' to 'pi' 
+    # Pi (Capacity)
     pi = {l: con_capacity_qi[l].Pi for l in L}
     
     cols_added_this_iter = 0
@@ -168,7 +155,7 @@ while True:
         cost_coeff = fare_data[orig] - (rate * fare_data.get(recap, 0))
         dual_sum = sigma[orig]
         
-        # Add capacity duals (Qi Formulation Logic)
+        # Add capacity duals 
         # Recaptured pax means:
         # 1. They leave ORIG legs (so they count as "Recap OUT"). Coeff +1 in capacity constraint.
         # 2. They enter RECAP legs (so they count as "Recap IN"). Coeff -1 in capacity constraint.
@@ -204,13 +191,15 @@ while True:
     if cols_added_this_iter == 0:
         break 
 
-runtime = time.time() - start_time
-
 # =============================================================================
 # 4. REPORTING
 # =============================================================================
+start_time = time.time()
 
 mp.optimize()
+
+end_time = time.time()
+total_runtime = end_time - start_time
 
 print("\n" + "="*50)
 print("COLUMN GENERATION RESULTS (Part 1 - Qi Relaxed)")
@@ -218,7 +207,7 @@ print("="*50)
 
 if mp.status == GRB.OPTIMAL:
     # 1. Performance Stats
-    print(f"Total Runtime: {runtime:.4f} seconds")
+    #print(f"Total Runtime: {runtime:.4f} seconds")
     print(f"Iterations to Converge: {iteration}")
     print(f"Columns in RMP (Before): {initial_cols}")
     print(f"Columns in RMP (After): {mp.NumVars}")
@@ -272,6 +261,8 @@ if mp.status == GRB.OPTIMAL:
         constr = mp.getConstrByName(f"Dem_{p}")
         if constr:
             print(f"{p:<10} | {demand_data[p]:<10} | {constr.Pi:.2f}")
+            
+    print(f"Total Runtime: {total_runtime:.8f} seconds")
             
 else:
     print(f"Model Failed. Status: {mp.status}")
