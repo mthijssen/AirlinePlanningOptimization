@@ -258,14 +258,17 @@ for k in K:
 
 # C7: Slots
 for i in N:
-    total_movements = quicksum((f[k,i,j] + f[k,j,i]) for k in K for j in N if j != i)
-    m.addConstr(total_movements <= slots_limit[i], name=f"Slots_{i}")
+    #total_movements = quicksum((f[k,i,j] + f[k,j,i]) for k in K for j in N if j != i)
+    landing_movements = quicksum((f[k,i,j]) for k in K for j in N if j != i)
+    m.addConstr(landing_movements <= slots_limit[i], name=f"Slots_{i}")
 
 # =============================================================================
 # 5. OPTIMIZE
 # =============================================================================
 
 m.optimize()
+
+AmountofFlights = 0
 
 if m.status == GRB.OPTIMAL:
     print("\n" + "="*60)
@@ -290,6 +293,9 @@ if m.status == GRB.OPTIMAL:
                     freq = f[k,i,j].X
                     if freq > 0.5:
                         print(f"{k:<20} | {i:<6} -> {j:<6} | {int(round(freq))}")
+                        AmountofFlights += freq
+    
+    print(f"Total number of flights is {AmountofFlights:.0f}")
     print("-" * 55)
 
 else:
