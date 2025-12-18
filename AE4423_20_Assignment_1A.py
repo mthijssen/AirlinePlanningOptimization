@@ -151,10 +151,34 @@ if __name__ == "__main__":
 
     """Plotten van de data voor de 2021 est demand vs real demand"""
 
+    plt.rcParams.update({
+    "text.usetex": True,
+    "font.family": "serif",
+    "font.serif": ["Computer Modern"],
+    "axes.labelsize": 10,
+    "font.size": 10,
+    "legend.fontsize": 9,
+    "xtick.labelsize": 9,
+    "ytick.labelsize": 9,
+    })
 
     plt.figure(figsize=(10,6))
-    plt.scatter(OD_long['Demand'], OD_long['Est_Demand'], alpha=0.6)
-    plt.plot([0, OD_long['Demand'].max()], [0, OD_long['Demand'].max()], 'r--', label='Perfect Fit')
+    plt.scatter(
+    OD_long['Demand'],
+    OD_long['Est_Demand'],
+    color='black',
+    alpha=0.6,
+    label='Observed'
+    )
+
+    plt.plot(
+    [0, OD_long['Demand'].max()],
+    [0, OD_long['Demand'].max()],
+    linestyle='--',
+    color='black',
+    linewidth=1.5,
+    label='Perfect Fit'
+    )
     plt.xlabel("Actual Demand (2021)")
     plt.ylabel("Estimated Demand (Model)")
     plt.title(f"Gravity Model Calibration\nR2: {model.rsquared:.3f}")
@@ -162,13 +186,24 @@ if __name__ == "__main__":
     plt.grid(True)
     plt.show()
 
-
-
     """Plot 2026 figure"""
 
     plt.figure(figsize=(10,6))
-    plt.scatter(OD_long['Demand'], OD_long['Est_Demand_2026'], alpha=0.6)
-    plt.plot([0, OD_long['Demand'].max()], [0, OD_long['Demand'].max()], 'r--', label='Perfect Fit') # plots line through y=x to easily see how similar the values are
+    plt.scatter(
+    OD_long['Demand'],
+    OD_long['Est_Demand_2026'],
+    color='black',
+    alpha=0.6,
+    label='Observed'
+    )
+    plt.plot(
+    [0, OD_long['Demand'].max()],
+    [0, OD_long['Demand'].max()],
+    linestyle='--',
+    color='black',
+    linewidth=1.5,
+    label='Perfect Fit'
+    )# plots line through y=x to easily see how similar the values are
     plt.xlabel("Actual Demand (2021)")
     plt.ylabel("Estimated Demand (2026)")
     plt.title("Gravity Model Forecast for 2026")
