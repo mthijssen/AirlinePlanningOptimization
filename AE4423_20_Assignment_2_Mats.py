@@ -59,14 +59,6 @@ model.setParam("OutputFlag", 1)   # set to 0 to mute solver output
 y = model.addVars(P, lb=0.0, name="y", vtype=GRB.CONTINUOUS)
 
 # Set UB for each itinerary according to its demand
-for p in P:
-    dp = 0.0 if pd.isna(demand[p]) else float(demand[p])
-    y[p].UB = dp
-
-
-# Objective: maximize sum fare_p * y_p
-obj = gp.quicksum((0.0 if pd.isna(fare[p]) else float(fare[p])) * y[p] for p in P)
-model.setObjective(obj, GRB.MAXIMIZE)
 
 # Capacity constraints
 cap_cons = {}
@@ -77,6 +69,36 @@ for ell in legs:
         leg_cap[ell],
         name=f"cap_{ell}"
     )
+
+
+s = model.addVars(P, lb=0.0, name="spill", vtype=GRB.CONTINUOUS)
+alpha = {
+    (row["From Itinerary"], row["To Itinerary"]): row["Recapture Rate"]
+    for _, row in recap.iterrows()
+}
+
+for p in P:
+    model.addConstr(
+        y[p] <= demand[p] + gp.quicksum(
+            alpha[q, p] * s[q]
+            for q in P
+            if (q, p) in alpha
+        ),
+        name=f"demand_recapture_{p}"
+    )
+
+for p in P:
+    model.addConstr(
+        s[p] >= demand[p] - y[p],
+        name=f"spill_def_{p}"
+    )
+
+
+model.setObjective(
+    gp.quicksum(fare[p] * y[p] for p in P),
+    GRB.MAXIMIZE
+)
+
 
 # Solve
 start = time.time()
