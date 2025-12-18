@@ -10,6 +10,7 @@ import pandas as pd
 from gurobipy import Model, GRB, quicksum
 import sys
 import os
+import time
 
 # =============================================================================
 # 1. DATA LOADING
@@ -57,8 +58,6 @@ for p in demand_data:
     x_orig[p] = m.addVar(obj=fare_data[p], vtype=GRB.CONTINUOUS, lb=0, name=f"X_orig_{p}")
 
 # x_recap[orig, recap]: Passengers on recapture itinerary
-# Note: Objective = Expected Revenue = Rate * Fare_recap
-# (This matches the standard "Relaxed" Path-Based logic)
 x_recap = {}
 for opt in recapture_options:
     orig = opt['orig']
@@ -109,8 +108,12 @@ for l in L:
 # =============================================================================
 # 3. SOLVE AND REPORT
 # =============================================================================
+start_time = time.time()
 
 m.optimize()
+
+end_time = time.time()
+total_runtime = end_time - start_time
 
 print("\n" + "="*50)
 print("PATH-BASED EXTENSIVE RESULT (NO COL GEN)")
@@ -133,6 +136,9 @@ if m.status == GRB.OPTIMAL:
     total_recap_pax = sum(v.X for v in x_recap.values())
     print(f"Total Pax on Original Paths: {int(total_orig)}")
     print(f"Total Pax on Recapture Paths: {int(total_recap_pax)}")
+    
+    print(f"Total Runtime: {total_runtime:.6f} seconds")
+    
 
 else:
     print("Model did not solve to optimality.")
