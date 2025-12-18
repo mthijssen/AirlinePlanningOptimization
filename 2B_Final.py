@@ -131,14 +131,34 @@ if m.status == GRB.OPTIMAL:
     print(f"Equivalent Spill Cost (Lost): €{equiv_spill:,.2f}")
     print("-" * 50)
     
-    # Stats
+    # =======================
+    # Passenger statistics
+    # =======================
     total_orig = sum(v.X for v in x_orig.values())
     total_recap_pax = sum(v.X for v in x_recap.values())
-    print(f"Total Pax on Original Paths: {int(total_orig)}")
+
+    # >>> ADDITION 1: TOTAL SPILLED PAX <<<
+    total_demand = sum(demand_data.values())
+    total_served = total_orig + total_recap_pax
+    total_spilled = total_demand - total_served
+
+    print(f"Total Pax on Original Paths:  {int(total_orig)}")
     print(f"Total Pax on Recapture Paths: {int(total_recap_pax)}")
-    
+    print(f"Total Spilled Pax:            {int(total_spilled)}")
+
+    # =======================
+    # Solver convergence info
+    # =======================
+    print("-" * 50)
+
+    # >>> ADDITION 2: ITERATIONS TO CONVERGE <<<
+    print(f"Simplex Iterations: {m.IterCount}")
+
+    # Only printed if barrier was used
+    if m.BarIterCount > 0:
+        print(f"Barrier Iterations: {m.BarIterCount}")
+
     print(f"Total Runtime: {total_runtime:.6f} seconds")
-    
 
 else:
     print("Model did not solve to optimality.")
