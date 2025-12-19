@@ -114,6 +114,55 @@ initial_cols = mp.NumVars
 print(f"RMP Initialized with {initial_cols} columns.")
 
 # =============================================================================
+# 2A. INITIAL RMP SOLUTION (BEFORE COLUMN GENERATION)
+# =============================================================================
+
+mp.optimize()
+
+if mp.status != GRB.OPTIMAL:
+    print("Initial RMP not optimal!")
+    sys.exit(1)
+
+print("\n" + "="*50)
+print("INITIAL RMP RESULTS")
+print("="*50)
+
+# Objective value (spill cost)
+print(f"Initial Spill Cost (Lost Revenue): €{mp.ObjVal:,.2f}")
+
+# Total spilled passengers
+initial_spilled = sum(variables[f"spill_{p}"].X for p in demand_data)
+print(f"Total Passengers Spilled (Initial RMP): {int(initial_spilled)}")
+
+# First 5 itineraries
+print("\n--- Initial RMP Decision Variables (First 5 Itineraries) ---")
+for i, p in enumerate(list(demand_data.keys())[:5]):
+    t_val = variables[f"trans_{p}"].X
+    s_val = variables[f"spill_{p}"].X
+    print(f"Itinerary {p}: Transported = {t_val:.1f}, Spilled = {s_val:.1f}")
+
+# Duals: Capacity
+print("\n--- Initial RMP Duals: Capacity Constraints (First 5 Flights) ---")
+print(f"{'Flight':<10} | {'Capacity':<10} | {'Pi':<10}")
+print("-" * 40)
+
+for i, l in enumerate(L[:5]):
+    constr = mp.getConstrByName(f"CapQi_{l}")
+    if constr:
+        print(f"{l:<10} | {capacity[l]:<10} | {constr.Pi:.2f}")
+
+# Duals: Demand
+print("\n--- Initial RMP Duals: Demand Constraints (First 5 Itineraries) ---")
+print(f"{'Itinerary':<10} | {'Demand':<10} | {'Sigma':<10}")
+print("-" * 40)
+
+for p in list(demand_data.keys())[:5]:
+    constr = mp.getConstrByName(f"Dem_{p}")
+    if constr:
+        print(f"{p:<10} | {demand_data[p]:<10} | {constr.Pi:.2f}")
+
+
+# =============================================================================
 # 3. COLUMN GENERATION LOOP
 # =============================================================================
 
