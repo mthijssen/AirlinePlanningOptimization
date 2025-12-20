@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Created on Sun Dec 14 17:34:20 2025
+Created on Sat Dec 20 16:19:46 2025
 
 @author: jimvanerp
 """
@@ -136,8 +136,6 @@ if m.status == GRB.OPTIMAL:
     # =======================
     total_orig = sum(v.X for v in x_orig.values())
     total_recap_pax = sum(v.X for v in x_recap.values())
-
-    # >>> ADDITION 1: TOTAL SPILLED PAX <<<
     total_demand = sum(demand_data.values())
     total_served = total_orig + total_recap_pax
     total_spilled = total_demand - total_served
@@ -147,17 +145,49 @@ if m.status == GRB.OPTIMAL:
     print(f"Total Spilled Pax:            {int(total_spilled)}")
 
     # =======================
+    # DUAL VARIABLES (Sigma & Pi)
+    # =======================
+    print("\n" + "="*50)
+    print("DUAL VARIABLES (SHADOW PRICES)")
+    print("="*50)
+
+    # 1. Capacity Duals (Pi) - Value of an extra seat
+    print("\n--- Capacity Duals (Pi) for First 5 Flights ---")
+    print(f"{'Flight':<10} | {'Capacity':<10} | {'Shadow Price (Pi)':<20}")
+    print("-" * 50)
+    
+    count = 0
+    for l in L:
+        constr = m.getConstrByName(f"Cap_{l}")
+        if constr and abs(constr.Pi) >= 0: 
+             print(f"{l:<10} | {capacity[l]:<10} | {constr.Pi:.2f}")
+        
+        # Limit print to first 5 
+        count += 1
+        if count >= 5: break
+
+    # 2. Demand Duals (Sigma) - Cost of losing a passenger
+    print("\n--- Demand Duals (Sigma) for First 5 Itineraries ---")
+    print(f"{'Itinerary':<10} | {'Demand':<10} | {'Shadow Price (Sigma)':<20}")
+    print("-" * 50)
+    
+    count = 0
+    for p in demand_data:
+        constr = m.getConstrByName(f"Dem_{p}")
+        if constr:
+            print(f"{p:<10} | {demand_data[p]:<10} | {constr.Pi:.2f}")
+            
+        # Limit print to first 5 
+        count += 1
+        if count >= 5: break
+
+    # =======================
     # Solver convergence info
     # =======================
-    print("-" * 50)
-
-    # >>> ADDITION 2: ITERATIONS TO CONVERGE <<<
+    print("\n" + "-" * 50)
     print(f"Simplex Iterations: {m.IterCount}")
-
-    # Only printed if barrier was used
     if m.BarIterCount > 0:
         print(f"Barrier Iterations: {m.BarIterCount}")
-
     print(f"Total Runtime: {total_runtime:.6f} seconds")
 
 else:
