@@ -3,7 +3,10 @@
 """
 Created on Sat Dec 20 16:19:46 2025
 
-@author: jimvanerp
+Group 12
+Jim van Erp 5083540
+Sil Havinga 4730321
+Mats Thijssen 4954114
 """
 
 import pandas as pd

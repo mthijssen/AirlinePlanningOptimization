@@ -3,7 +3,10 @@
 """
 Created on Wed Dec  3 14:43:05 2025
 
-@author: jimvanerp
+Group 12
+Jim van Erp 5083540
+Sil Havinga 4730321
+Mats Thijssen 4954114
 """
 import pandas as pd
 import numpy as np
@@ -258,7 +261,6 @@ for k in K:
 
 # C7: Slots
 for i in N:
-    #total_movements = quicksum((f[k,i,j] + f[k,j,i]) for k in K for j in N if j != i)
     landing_movements = quicksum((f[k,i,j]) for k in K for j in N if j != i)
     m.addConstr(landing_movements <= slots_limit[i], name=f"Slots_{i}")
 

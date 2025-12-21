@@ -2,7 +2,11 @@
 """
 Created on Wed Nov 26 14:37:41 2025
 
-@author: silha, jimvanerp, mathijssen
+Group 12
+Jim van Erp 5083540
+Sil Havinga 4730321
+Mats Thijssen 4954114
+
 """
 import numpy as np
 import pandas as pd
