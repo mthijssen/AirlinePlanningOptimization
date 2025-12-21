@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Created on Sun Dec 14 17:23:17 2025
+Created on Sun Dec 14 17:29:23 2025
 
 @author: jimvanerp
 """
@@ -16,10 +16,11 @@ import time
 # 1. DATA LOADING
 # =============================================================================
 
-# Define filenames
+# --- Loading Data ---
 df_flights = pd.read_excel('Group_12.xlsx', sheet_name=0)
 df_itineraries = pd.read_excel('Group_12.xlsx', sheet_name=1)
 df_recapture = pd.read_excel('Group_12.xlsx', sheet_name=2)
+
 
 # --- Data Structures ---
 L = df_flights['Flight No.'].tolist()
@@ -29,7 +30,8 @@ fare_data = df_itineraries.set_index('Itinerary')['Price [EUR]'].to_dict()
 
 # Map Itinerary -> Legs
 itin_legs = {}
-# Also calculate Q_l (Unconstrained Demand per Leg)
+
+#Calculate Q_l (Unconstrained Demand per Leg)
 Q_l = {l: 0 for l in L}
 
 for idx, row in df_itineraries.iterrows():
@@ -49,8 +51,6 @@ for idx, row in df_itineraries.iterrows():
         
     itin_legs[p] = legs
 
-print(f"Calculated Q_l parameters. Max Leg Demand: {max(Q_l.values())}")
-
 # Recapture options
 recapture_options = []
 for idx, row in df_recapture.iterrows():
@@ -64,7 +64,7 @@ for idx, row in df_recapture.iterrows():
 # 2. MASTER PROBLEM (RMP) SETUP
 # =============================================================================
 
-mp = Model("RMP_Qi_ColGen")
+mp = Model("RMP_Keypath_model")
 mp.setParam('OutputFlag', 0)
 
 # -- Constraints --
@@ -75,58 +75,31 @@ con_demand = {}
 for p in demand_data:
     con_demand[p] = mp.addConstr(LinExpr() == demand_data[p], name=f"Dem_{p}")
 
-# 2. Capacity Constraints (Qi Formulation)
+# 2. Capacity Constraints 
 # Sum(Spill_p on l) + Sum(Recap_OUT_p on l) - Sum(Recap_IN_p on l) >= Q_l - Cap_l
-# Note: Gurobi standard form is usually <= or ==. >= is fine.
-# Dual: Mu (Expected to be positive if constraint is >= ?)
 con_capacity_qi = {}
 for l in L:
     rhs = Q_l[l] - capacity[l]
-    # We create constraint: LHS >= RHS
     con_capacity_qi[l] = mp.addConstr(LinExpr() >= rhs, name=f"CapQi_{l}")
-
-# 3. Recapture Limit Constraints (Dual: Gamma)
-# t_pr - b_pr * s_p <= 0
-con_recap_limit = {}
-for opt in recapture_options:
-    p = opt['orig']
-    r = opt['recap']
-    con_recap_limit[(p, r)] = mp.addConstr(LinExpr() <= 0, name=f"Lim_{p}_{r}")
 
 # -- Initialize Variables --
 variables = {} 
+recap_vars = {} # Store recapture vars separately for easy access
 
 # A. Spill Variables (s_p)
-# Objective: Fare_p
-# Demand Constraint: +1
-# Capacity (Qi) Constraint: +1 for every leg l used by p (Spill contributes to "Sum Spill")
-# Limit Constraint: -rate for every recapture option from p
 for p in demand_data:
     col = Column()
     col.addTerms(1.0, con_demand[p])
     
-    # Add to Capacity Constraints (Qi form: Spill counts as +1)
+    # Add to Capacity Constraints
     for l in itin_legs.get(p, []):
         if l in con_capacity_qi:
             col.addTerms(1.0, con_capacity_qi[l])
-            
-    # Add to Limit Constraints (-rate * s_p)
-    for opt in recapture_options:
-        if opt['orig'] == p:
-            r = opt['recap']
-            rate = opt['rate']
-            col.addTerms(-rate, con_recap_limit[(p, r)])
             
     var = mp.addVar(obj=fare_data[p], vtype=GRB.CONTINUOUS, column=col, name=f"Spill_{p}")
     variables[f"spill_{p}"] = var
 
 # B. Original Transport Variables (t_p)
-# Objective: 0
-# Demand Constraint: +1
-# Capacity (Qi) Constraint: 0 contribution?
-# Logic: t_p = D_p - s_p - t_pr.
-# The Qi constraint is derived by substituting t_p out. 
-# So t_p does NOT appear in the Qi constraint.
 for p in demand_data:
     col = Column()
     col.addTerms(1.0, con_demand[p])
@@ -141,10 +114,59 @@ initial_cols = mp.NumVars
 print(f"RMP Initialized with {initial_cols} columns.")
 
 # =============================================================================
+# 2A. INITIAL RMP SOLUTION (BEFORE COLUMN GENERATION)
+# =============================================================================
+
+mp.optimize()
+
+if mp.status != GRB.OPTIMAL:
+    print("Initial RMP not optimal!")
+    sys.exit(1)
+
+print("\n" + "="*50)
+print("INITIAL RMP RESULTS")
+print("="*50)
+
+# Objective value (spill cost)
+print(f"Initial Spill Cost (Lost Revenue): €{mp.ObjVal:,.2f}")
+
+# Total spilled passengers
+initial_spilled = sum(variables[f"spill_{p}"].X for p in demand_data)
+print(f"Total Passengers Spilled (Initial RMP): {int(initial_spilled)}")
+
+# First 5 itineraries
+print("\n--- Initial RMP Decision Variables (First 5 Itineraries) ---")
+for i, p in enumerate(list(demand_data.keys())[:5]):
+    t_val = variables[f"trans_{p}"].X
+    s_val = variables[f"spill_{p}"].X
+    print(f"Itinerary {p}: Transported = {t_val:.1f}, Spilled = {s_val:.1f}")
+
+# Duals: Capacity
+print("\n--- Initial RMP Duals: Capacity Constraints (First 5 Flights) ---")
+print(f"{'Flight':<10} | {'Capacity':<10} | {'Pi':<10}")
+print("-" * 40)
+
+for i, l in enumerate(L[:5]):
+    constr = mp.getConstrByName(f"CapQi_{l}")
+    if constr:
+        print(f"{l:<10} | {capacity[l]:<10} | {constr.Pi:.2f}")
+
+# Duals: Demand
+print("\n--- Initial RMP Duals: Demand Constraints (First 5 Itineraries) ---")
+print(f"{'Itinerary':<10} | {'Demand':<10} | {'Sigma':<10}")
+print("-" * 40)
+
+for p in list(demand_data.keys())[:5]:
+    constr = mp.getConstrByName(f"Dem_{p}")
+    if constr:
+        print(f"{p:<10} | {demand_data[p]:<10} | {constr.Pi:.2f}")
+
+
+# =============================================================================
 # 3. COLUMN GENERATION LOOP
 # =============================================================================
 
-start_time = time.time()
+#start_time = time.time()
 iteration = 0
 cols_added_total = 0
 
@@ -160,13 +182,8 @@ while True:
     # Sigma (Demand)
     sigma = {p: con_demand[p].Pi for p in demand_data}
     
-    # Mu (Capacity Qi)
-    mu = {l: con_capacity_qi[l].Pi for l in L}
-    
-    # Gamma (Limits)
-    gamma = {} 
-    for key, constr in con_recap_limit.items():
-        gamma[key] = constr.Pi
+    # Pi (Capacity)
+    pi = {l: con_capacity_qi[l].Pi for l in L}
     
     cols_added_this_iter = 0
     
@@ -184,35 +201,26 @@ while True:
         # --- Reduced Cost Calculation ---
         # Variable: t_pr (Recaptured Pax)
         # Objective Coeff: Cost_pr = Fare_orig - rate * Fare_recap (Spill Cost Minimization)
-        # Constraints coefficients:
-        # 1. Demand (orig): +1
-        # 2. Limit (orig, recap): +1
-        # 3. Capacity (Qi) Constraints:
-        #    - It is an "Outbound" flow from legs in 'orig' -> Coeff +1
-        #    - It is an "Inbound" flow to legs in 'recap' -> Coeff -1
-        
         cost_coeff = fare_data[orig] - (rate * fare_data.get(recap, 0))
+        dual_sum = sigma[orig]
         
-        # Dual terms sum
-        dual_sum = sigma[orig] + gamma[(orig, recap)]
-        
-        # Add capacity duals
-        # +1 * Mu_l for l in ORIG path
+        # Add capacity duals 
+        # Recaptured pax means:
+        # 1. They leave ORIG legs (so they count as "Recap OUT"). Coeff +1 in capacity constraint.
+        # 2. They enter RECAP legs (so they count as "Recap IN"). Coeff -1 in capacity constraint.
         for l in itin_legs.get(orig, []):
-            if l in mu:
-                dual_sum += 1.0 * mu[l]
+            if l in pi:
+                dual_sum += 1.0 * pi[l]
                 
-        # -1 * Mu_l for l in RECAP path
         for l in itin_legs.get(recap, []):
-            if l in mu:
-                dual_sum += -1.0 * mu[l]
+            if l in pi:
+                dual_sum += -1.0 * pi[l]
         
         reduced_cost = cost_coeff - dual_sum
         
         if reduced_cost < -0.0001:
             col = Column()
             col.addTerms(1.0, con_demand[orig])
-            col.addTerms(1.0, con_recap_limit[(orig, recap)])
             
             # Capacity Qi terms
             for l in itin_legs.get(orig, []):
@@ -225,40 +233,85 @@ while True:
             
             var = mp.addVar(obj=cost_coeff, vtype=GRB.CONTINUOUS, column=col, name=var_name)
             variables[var_name] = var
+            recap_vars[(orig, recap)] = var
             cols_added_this_iter += 1
             cols_added_total += 1
             
     if cols_added_this_iter == 0:
         break 
 
-runtime = time.time() - start_time
-
 # =============================================================================
 # 4. REPORTING
 # =============================================================================
+start_time = time.time()
 
 mp.optimize()
 
+end_time = time.time()
+total_runtime = end_time - start_time
+
 print("\n" + "="*50)
-print("COLUMN GENERATION RESULTS (Qi Formulation)")
+print("COLUMN GENERATION RESULTS (Part 1 - Qi Relaxed)")
 print("="*50)
 
 if mp.status == GRB.OPTIMAL:
-    print(f"Total Runtime: {runtime:.4f} seconds")
-    print(f"Iterations: {iteration}")
-    print(f"Columns Initial: {initial_cols}")
-    print(f"Columns Added: {cols_added_total}")
-    print(f"Total Columns Final: {mp.NumVars}")
-    print(f"Optimal Objective (Spill Cost): €{mp.ObjVal:,.2f}")
+    # 1. Performance Stats
+    #print(f"Total Runtime: {runtime:.4f} seconds")
+    print(f"Iterations to Converge: {iteration}")
+    print(f"Columns in RMP (Before): {initial_cols}")
+    print(f"Columns in RMP (After): {mp.NumVars}")
+    print(f"New Columns Generated: {cols_added_total}")
+    
+    # 2. Optimal Airline Cost
+    print(f"\nOptimal Spill Cost (Lost Revenue): €{mp.ObjVal:,.2f}")
 
+    # 3. Total Passengers Spilled
+    # Make sure we sum the CURRENT values of the variables
     total_spilled = sum(variables[f"spill_{p}"].X for p in demand_data)
     print(f"Total Passengers Spilled: {int(total_spilled)}")
 
-    total_recap = 0
-    for v in mp.getVars():
-        if v.VarName.startswith("Recap_"):
-            total_recap += v.X
-    print(f"Total Passengers Recaptured: {int(total_recap)}")
+    # 4. Optimal Decision Variables (First 5 Itineraries)
+    print("\n--- Decision Variables (First 5 Itineraries) ---")
+    for i, p in enumerate(list(demand_data.keys())[:5]):
+        t_val = variables[f"trans_{p}"].X
+        s_val = variables[f"spill_{p}"].X
+        print(f"Itinerary {p}:")
+        print(f"  Demand: {demand_data[p]}")
+        print(f"  Transported (Original): {t_val:.1f}")
+        print(f"  Spilled: {s_val:.1f}")
+        
+        # Check recapture
+        found_recap = False
+        for (orig, target), var in recap_vars.items():
+            if orig == p and var.X > 0.1:
+                print(f"  -> Recaptured to {target}: {var.X:.1f}")
+                found_recap = True
+        if not found_recap:
+            print("  -> No Recapture")
+
+    # 5. Optimal Dual Variables (Pi and Sigma)
+    print("\n--- Dual Variables: Capacity Constraints (Pi) for First 5 Flights ---")
+    print(f"{'Flight':<10} | {'Capacity':<10} | {'Shadow Price (Pi)':<20}")
+    print("-" * 50)
     
+    count = 0
+    for l in L:
+        if count >= 5: break
+        constr = mp.getConstrByName(f"CapQi_{l}")
+        if constr:
+            print(f"{l:<10} | {capacity[l]:<10} | {constr.Pi:.2f}")
+            count += 1
+
+    print("\n--- Dual Variables: Demand Constraints (Sigma) for First 5 Itineraries ---")
+    print(f"{'Itinerary':<10} | {'Demand':<10} | {'Shadow Price (Sigma)':<20}")
+    print("-" * 50)
+    
+    for i, p in enumerate(list(demand_data.keys())[:5]):
+        constr = mp.getConstrByName(f"Dem_{p}")
+        if constr:
+            print(f"{p:<10} | {demand_data[p]:<10} | {constr.Pi:.2f}")
+            
+    print(f"Total Runtime: {total_runtime:.8f} seconds")
+            
 else:
     print(f"Model Failed. Status: {mp.status}")
