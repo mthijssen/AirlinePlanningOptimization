@@ -405,30 +405,83 @@ class DPSolver:
 
 def main():
     fleet, airports, raw_demand, df_coef, hub_name = load_data()
-    
-    if not fleet or not airports: return
 
+    if not fleet or not airports:
+        return
+
+    # Track remaining aircraft counts
+    remaining = {ac.name: ac.count for ac in fleet}
 
     final_report = []
     current_demand = raw_demand.copy()
-    
-    for ac_type in fleet:
-        for i in range(ac_type.count):
-            print(f"Optimizing for {ac_type.name} #{i+1}...")
-            solver = DPSolver(ac_type, airports, current_demand, df_coef, hub_name)
-            max_val = solver.solve()
+
+    aircraft_id_counter = {ac.name: 0 for ac in fleet}
+
+    while True:
+        best_profit = 0
+        best_ac = None
+        best_schedule = None
+
+        # 1. TEST all aircraft types (one copy each)
+        for ac_type in fleet:
+            if remaining[ac_type.name] <= 0:
+                continue
+
+            # IMPORTANT: use a COPY of demand so nothing is committed
+            test_demand = current_demand.copy()
+
+            solver = DPSolver(
+                ac_type,
+                airports,
+                test_demand,
+                df_coef,
+                hub_name
+            )
+
+            solver.solve()
             schedule, profit = solver.reconstruct_path_and_update_demand()
-            
-            if schedule and profit > 0:
-                print(f"  -> Found Schedule! Profit: {profit:.2f}, Legs: {len(schedule)}")
-                final_report.append({
-                    "Aircraft": f"{ac_type.name}_{i+1}",
-                    "Schedule": schedule,
-                    "Profit": profit
-                })
-            else:
-                pass 
-                #print(f"  -> No profitable schedule found.")
+
+            if schedule and profit > best_profit:
+                best_profit = profit
+                best_ac = ac_type
+                best_schedule = schedule
+
+        # 2. STOP if nothing profitable remains
+        if best_ac is None:
+            break
+
+        # 3. COMMIT the best aircraft (now update real demand)
+        solver = DPSolver(
+            best_ac,
+            airports,
+            current_demand,
+            df_coef,
+            hub_name
+        )
+
+        solver.solve()
+        schedule, profit = solver.reconstruct_path_and_update_demand()
+
+        aircraft_id_counter[best_ac.name] += 1
+        aircraft_label = f"{best_ac.name}_{aircraft_id_counter[best_ac.name]}"
+
+        final_report.append({
+            "Aircraft": aircraft_label,
+            "Schedule": schedule,
+            "Profit": profit
+        })
+
+        remaining[best_ac.name] -= 1
+
+        print(
+            f"Selected {aircraft_label}: "
+            f"Profit = {profit:.2f}, Legs = {len(schedule)}"
+        )
+
+    # Optional summary
+    total_profit = sum(r["Profit"] for r in final_report)
+    print(f"\nTotal Fleet Profit: {total_profit:.2f}")
+
     
     print("\n\n=== FINAL REPORT ===")
     total_airline_profit = 0
