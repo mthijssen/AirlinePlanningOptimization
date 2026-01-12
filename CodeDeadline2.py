@@ -6,7 +6,7 @@ Created on Tue Jan  6 21:11:48 2026
 @author: jimvanerp
 """
 
-#Assumption: An exchange rate of 1 EUR = 1 USD was used as no rate was provided."
+#Assumption: An exchange rate of 1 EUR = 1 USD was used as no rate was provided.
 
 import pandas as pd
 import numpy as np
@@ -19,7 +19,7 @@ STEPS_PER_HOUR = 60 // TIME_STEP_MIN
 TOTAL_STEPS = 24 * STEPS_PER_HOUR  # 240 steps (0 to 240)
 FUEL_COST_PER_GALLON = 1.42
 FUEL_FACTOR = 1.5
-DEMAND_FACTOR = 1.0 
+DEMAND_FACTOR = 1.0
 
 # --- DATA STRUCTURES ---
 
@@ -478,6 +478,29 @@ def main():
             f"Profit = {profit:.2f}, Legs = {len(schedule)}"
         )
 
+    df_long = pd.DataFrame(
+        [(o, d, v) for (o, d), v in current_demand.items()],
+        columns=["Origin", "Destination", "Demand"]
+    )
+
+    df_od = df_long.pivot(
+        index="Origin",
+        columns="Destination",
+        values="Demand"
+    ).fillna(0)
+
+    airport_order = [
+    "EGLL", "LFPG", "EHAM", "EDDF", "LEMF", "LEBL", "EDDM", "LIRF", "EIDW", "ESSA",
+    "LPPT", "EDDT", "EFHK", "EPWA", "EGPH", "LROP", "LGIR", "BIKF", "LICJ", "LPMA"
+    ]
+
+    df_od = df_od.reindex(index=airport_order, columns=airport_order)
+
+    output_file = "final_remaining_demand.xlsx"
+    df_od.to_excel(output_file)
+
+    print(f"Saved final demand matrix to {output_file}")
+
     # Optional summary
     total_profit = sum(r["Profit"] for r in final_report)
     print(f"\nTotal Fleet Profit: {total_profit:.2f}")
@@ -494,6 +517,8 @@ def main():
             print(f"  {dep_time} {leg['Origin']} -> {leg['Dest']} ({arr_time}) | Pax: {int(leg['Pax'])}")
     
     print(f"Total Airline Profit: {total_airline_profit:.2f} EUR")
+
+    
 
 if __name__ == "__main__":
     main()
