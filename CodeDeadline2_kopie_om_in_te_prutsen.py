@@ -56,7 +56,7 @@ class AircraftType:
 
     def calc_trip_cost(self, dist):
         # Time Cost
-        c_t = self.time_cost_param * (dist / self.speed)
+        c_t = self.time_cost_param * (dist / self.speed) #Moet hier niet de 30 min + TaT ook bij?
         # Fuel Cost
         c_f = (self.fuel_cost_param * FUEL_COST_PER_GALLON / FUEL_FACTOR) * dist
         # Total = Fixed + Time + Fuel
@@ -518,6 +518,7 @@ def main():
     
     print(f"Total Airline Profit: {total_airline_profit:.2f} EUR")
 
+    #print((math.ceil((leg['Dep_Step']*TIME_STEP_MIN)/60.0)))
 
 if __name__ == "__main__":
     main()
