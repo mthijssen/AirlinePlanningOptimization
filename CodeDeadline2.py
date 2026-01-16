@@ -1,9 +1,8 @@
-#!/usr/bin/env python3
-# -*- coding: utf-8 -*-
 """
-Created on Tue Jan  6 21:11:48 2026
-
-@author: jimvanerp
+Group 12
+Jim van Erp 5083540
+Sil Havinga 4730321
+Mats Thijssen 4954114
 """
 
 #Assumption: An exchange rate of 1 EUR = 1 USD was used as no rate was provided.
@@ -46,7 +45,7 @@ class AircraftType:
     count: int       # Number of aircraft available
 
     def calc_flight_time_min(self, dist):
-        # Time = (Dist / Speed) * 60 + 30 (includes taxi)
+        # Time = (Dist / Speed) * 60 + 30 (includes twice 15 minutes for take off and landing)
         return (dist / self.speed) * 60 + 30
 
     def calc_steps(self, dist):
@@ -78,165 +77,138 @@ def haversine_distance(lat1, lon1, lat2, lon2):
     c = 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
     return R * c
 
-def load_data():
-    print("Loading data...")
-    
+def load_data():    
     # 1. LOAD FLEET
-    try:
-        df_fleet = pd.read_excel("FleetType.xlsx", header=None)
-        fleet = []
-        num_cols = len(df_fleet.columns)
-        for col_idx in range(1, num_cols):
-            try:
-                fleet.append(AircraftType(
-                    name=str(df_fleet.iloc[0, col_idx]),
-                    speed=float(df_fleet.iloc[1, col_idx]),
-                    seats=int(df_fleet.iloc[2, col_idx]),
-                    tat=int(df_fleet.iloc[3, col_idx]),
-                    max_range=float(df_fleet.iloc[4, col_idx]),
-                    runway_req=float(df_fleet.iloc[5, col_idx]),
-                    lease_cost=float(df_fleet.iloc[6, col_idx]),
-                    fixed_cost=float(df_fleet.iloc[7, col_idx]),
-                    time_cost_param=float(df_fleet.iloc[8, col_idx]),
-                    fuel_cost_param=float(df_fleet.iloc[9, col_idx]),
-                    count=int(df_fleet.iloc[10, col_idx])
-                ))
-            except: pass
-    except Exception as e:
-        print(f"ERROR loading Fleet: {e}")
-        return [], {}, {}, None, ""
+    df_fleet = pd.read_excel("FleetType.xlsx", header=None)
+    fleet = []
+    num_cols = len(df_fleet.columns)
+    for col_idx in range(1, num_cols):
+        fleet.append(AircraftType(
+            name=str(df_fleet.iloc[0, col_idx]),
+            speed=float(df_fleet.iloc[1, col_idx]),
+            seats=int(df_fleet.iloc[2, col_idx]),
+            tat=int(df_fleet.iloc[3, col_idx]),
+            max_range=float(df_fleet.iloc[4, col_idx]),
+            runway_req=float(df_fleet.iloc[5, col_idx]),
+            lease_cost=float(df_fleet.iloc[6, col_idx]),
+            fixed_cost=float(df_fleet.iloc[7, col_idx]),
+            time_cost_param=float(df_fleet.iloc[8, col_idx]),
+            fuel_cost_param=float(df_fleet.iloc[9, col_idx]),
+            count=int(df_fleet.iloc[10, col_idx])
+        ))
+
 
     # 2. LOAD DEMAND & AIRPORTS
-    try:
-        demand_file = "DemandGroup12.xlsx" 
-        df_raw = pd.read_excel(demand_file, header=None)
-        
-        airports = {}
-        hub_name = "EDDF"
-        
-        # SEARCH FOR AIRPORT DATA (Robust search)
-        icao_row_idx = -1
-        col_start_idx = -1
-        for r in range(20):
-            for c in range(5):
-                val = str(df_raw.iloc[r, c]).strip()
-                if "ICAO Code" in val:
-                    icao_row_idx = r
-                    col_start_idx = c + 1
-                    break
-            if icao_row_idx != -1: break
-            
-        codes_row = df_raw.iloc[icao_row_idx, col_start_idx:]
-        lats_row  = df_raw.iloc[icao_row_idx + 1, col_start_idx:]
-        lons_row  = df_raw.iloc[icao_row_idx + 2, col_start_idx:]
-        runways_row = df_raw.iloc[icao_row_idx + 3, col_start_idx:]
-        
-        valid_codes_set = set()
-        
-        for col in codes_row.index:
-            code_val = codes_row[col]
-            if pd.isna(code_val): continue
-            code = str(code_val).strip()
-            
-            try:
-                lat = pd.to_numeric(lats_row[col], errors='coerce')
-                lon = pd.to_numeric(lons_row[col], errors='coerce')
-                runway = pd.to_numeric(runways_row[col], errors='coerce')
-                if pd.isna(runway): runway = 2000 
-                
-                if pd.notna(lat) and pd.notna(lon):
-                    airports[code] = Airport(code, runway, 0.0, lat, lon)
-                    valid_codes_set.add(code)
-            except: pass
-
-        # Distances
-        if hub_name in airports:
-            hub_lat = airports[hub_name].lat
-            hub_lon = airports[hub_name].lon
-            for code, apt in airports.items():
-                if code != hub_name:
-                    apt.dist_from_hub = haversine_distance(hub_lat, hub_lon, apt.lat, apt.lon)
-        else:
-            print(f"ERROR: Hub {hub_name} not found.")
-            return fleet, {}, {}, None, ""
-
-        # FIND MATRIX
-        raw_demand = {}
-        matrix_header_row = -1
-        for r in range(icao_row_idx + 5, len(df_raw)):
-            matches = 0
-            for c in range(len(df_raw.columns)):
-                val = str(df_raw.iloc[r, c]).strip()
-                if val in valid_codes_set:
-                    matches += 1
-            if matches >= 3:
-                matrix_header_row = r
+    demand_file = "DemandGroup12.xlsx" 
+    df_raw = pd.read_excel(demand_file, header=None)
+    
+    airports = {}
+    hub_name = "EDDF"
+    
+    # SEARCH FOR AIRPORT DATA (Robust search)
+    icao_row_idx = -1
+    col_start_idx = -1
+    for r in range(20):
+        for c in range(5):
+            val = str(df_raw.iloc[r, c]).strip()
+            if "ICAO Code" in val:
+                icao_row_idx = r
+                col_start_idx = c + 1
                 break
+        if icao_row_idx != -1: break
         
-        matrix_dest_map = {}
-        for c in range(len(df_raw.columns)):
-            val = str(df_raw.iloc[matrix_header_row, c]).strip()
-            if val in valid_codes_set:
-                matrix_dest_map[c] = val
-                
-        for r in range(matrix_header_row + 1, len(df_raw)):
-            origin = None
-            val0 = str(df_raw.iloc[r, 0]).strip()
-            val1 = str(df_raw.iloc[r, 1]).strip() if len(df_raw.columns)>1 else ""
-            if val0 in valid_codes_set: origin = val0
-            elif val1 in valid_codes_set: origin = val1
-            
-            if origin:
-                for c, dest in matrix_dest_map.items():
-                    val = df_raw.iloc[r, c]
-                    if pd.notna(val) and val > 0:
-                        # Division by 7 for Daily Demand
-                        daily_val = val * DEMAND_FACTOR
-                        raw_demand[(origin, dest)] = daily_val
+    codes_row = df_raw.iloc[icao_row_idx, col_start_idx:]
+    lats_row  = df_raw.iloc[icao_row_idx + 1, col_start_idx:]
+    lons_row  = df_raw.iloc[icao_row_idx + 2, col_start_idx:]
+    runways_row = df_raw.iloc[icao_row_idx + 3, col_start_idx:]
+    
+    valid_codes_set = set()
+    
+    for col in codes_row.index:
+        code_val = codes_row[col]
+        if pd.isna(code_val): continue
+        code = str(code_val).strip()
+        
+        lat = pd.to_numeric(lats_row[col], errors='coerce')
+        lon = pd.to_numeric(lons_row[col], errors='coerce')
+        runway = pd.to_numeric(runways_row[col], errors='coerce')
+        if pd.isna(runway): runway = 2000 
+        
+        if pd.notna(lat) and pd.notna(lon):
+            airports[code] = Airport(code, runway, 0.0, lat, lon)
+            valid_codes_set.add(code)
 
-        print(f"-> Loaded {len(raw_demand)} demand entries (Daily average).")
-
-    except Exception as e:
-        print(f"ERROR loading Demand: {e}")
+    # Distances
+    if hub_name in airports:
+        hub_lat = airports[hub_name].lat
+        hub_lon = airports[hub_name].lon
+        for code, apt in airports.items():
+            if code != hub_name:
+                apt.dist_from_hub = haversine_distance(hub_lat, hub_lon, apt.lat, apt.lon)
+    else:
+        print(f"ERROR: Hub {hub_name} not found.")
         return fleet, {}, {}, None, ""
 
-    # 3. Load Coefficients (STRICT LAYOUT FROM USER)
-    try:
-        # Load raw file (no headers, index 0, 1, 2...)
-        df_raw_coef = pd.read_excel("HourCoefficients.xlsx", header=None)
+    # FIND MATRIX
+    raw_demand = {}
+    matrix_header_row = -1
+    for r in range(icao_row_idx + 5, len(df_raw)):
+        matches = 0
+        for c in range(len(df_raw.columns)):
+            val = str(df_raw.iloc[r, c]).strip()
+            if val in valid_codes_set:
+                matches += 1
+        if matches >= 3:
+            matrix_header_row = r
+            break
+    
+    matrix_dest_map = {}
+    for c in range(len(df_raw.columns)):
+        val = str(df_raw.iloc[matrix_header_row, c]).strip()
+        if val in valid_codes_set:
+            matrix_dest_map[c] = val
+            
+    for r in range(matrix_header_row + 1, len(df_raw)):
+        origin = None
+        val0 = str(df_raw.iloc[r, 0]).strip()
+        val1 = str(df_raw.iloc[r, 1]).strip() if len(df_raw.columns)>1 else ""
+        if val0 in valid_codes_set: origin = val0
+        elif val1 in valid_codes_set: origin = val1
         
-        # Slicing based on specific description:
-        # Data Rows: 3 to 22 (Indices 2 to 21)
-        # ICAO Code: Column C (Index 2)
-        # Hour 0 to 23: Column D (Index 3) to AA (Index 26)
-        
-        # 1. Extract the block [Rows 2:22, Cols 2:27]
-        # (End index is exclusive, so 22 gets rows up to 21, 27 gets cols up to 26)
-        df_coef = df_raw_coef.iloc[2:22, 2:27].copy()
-        
-        # 2. Set the first column of this block (Index 2) as the Index (ICAO Codes)
-        df_coef = df_coef.set_index(2)
-        
-        # 3. Rename columns. Current column names are integers 3...26.
-        # We want to map Col 3 -> 0, Col 4 -> 1 ... Col 26 -> 23
-        col_map = {i: (i - 3) for i in range(3, 27)}
-        df_coef = df_coef.rename(columns=col_map)
-        
-        # 4. Clean index strings
-        df_coef.index = df_coef.index.astype(str).str.strip()
-        
-        print(f"-> Coefficients loaded strictly. Found {len(df_coef)} airports.")
-        
-    except Exception as e:
-        print(f"WARNING: Coef load failed ({e}). Using flat demand.")
-        df_coef = pd.DataFrame()
-        
-    # Sort fleet by seats (Descending) so Big Jets get priority
-    fleet.sort(key=lambda x: x.seats, reverse=True)
+        if origin:
+            for c, dest in matrix_dest_map.items():
+                val = df_raw.iloc[r, c]
+                if pd.notna(val) and val > 0:
+                    daily_val = val * DEMAND_FACTOR
+                    raw_demand[(origin, dest)] = daily_val
+
+    print(f"-> Loaded {len(raw_demand)} demand entries (Daily average).")
+
+
+    # 3. Load Coefficients
+    df_raw_coef = pd.read_excel("HourCoefficients.xlsx", header=None)
+    # 1. Extract the block [Rows 2:22, Cols 2:27]
+    # (End index is exclusive, so 22 gets rows up to 21, 27 gets cols up to 26)
+    df_coef = df_raw_coef.iloc[2:22, 2:27].copy()
+    
+    # 2. Set the first column of this block (Index 2) as the Index (ICAO Codes)
+    df_coef = df_coef.set_index(2)
+    
+    # 3. Rename columns. Current column names are integers 3...26.
+    # We want to map Col 3 -> 0, Col 4 -> 1 ... Col 26 -> 23
+    col_map = {i: (i - 3) for i in range(3, 27)}
+    df_coef = df_coef.rename(columns=col_map)
+    
+    # 4. Clean index strings
+    df_coef.index = df_coef.index.astype(str).str.strip()
+    
+    print(f"-> Coefficients loaded strictly. Found {len(df_coef)} airports.")
 
     return fleet, airports, raw_demand, df_coef, hub_name
 
-# --- DYNAMIC PROGRAMMING SOLVER ---
+######################################
+# --- DYNAMIC PROGRAMMING SOLVER --- #
+######################################
 
 class DPSolver:
     def __init__(self, ac_type: AircraftType, airports, demand_state, hourly_coef, hub_id):
@@ -254,16 +226,9 @@ class DPSolver:
         daily_total = self.demand_state[(origin, dest)]
         h = int(hour) % 24
         
-        # Default flat profile if not found
-        c = 0.04 
-        
         # STRICT LOOKUP
         if origin in self.coef.index:
-            # We expect columns 0, 1, ... 23 to exist as integers
-            try:
-                c = self.coef.loc[origin, h]
-            except:
-                pass # Column 'h' missing? Keep 0.04
+            c = self.coef.loc[origin, h]
         
         return daily_total * c
 
@@ -366,11 +331,10 @@ class DPSolver:
                     if h < 0 or pax_left_to_remove <= 0: break
                     available = self.get_demand_at_hour(origin, dest, h)
                     
-                    coef = 0.04 
+                    coef = 0.0
                     # STRICT LOOKUP
                     if origin in self.coef.index:
-                        try: coef = self.coef.loc[origin, h]
-                        except: pass
+                        coef = self.coef.loc[origin, h]
                     
                     if coef > 0:
                         to_take = min(available, pax_left_to_remove)
@@ -477,6 +441,8 @@ def main():
             f"Selected {aircraft_label}: "
             f"Profit = {profit:.2f}, Legs = {len(schedule)}"
         )
+
+    # Print final remaing demand to help debugging 
 
     df_long = pd.DataFrame(
         [(o, d, v) for (o, d), v in current_demand.items()],
